@@ -20,6 +20,24 @@ target_compile_definitions(tools INTERFACE
 	"MINICORE"
 )
 
+# Apply GLOBAL_DEFINITIONS properly - only preprocessor definitions, not compiler flags
+if( GLOBAL_DEFINITIONS )
+	# Parse GLOBAL_DEFINITIONS string and apply each definition
+	string( REPLACE " " ";" GLOBAL_DEFS_LIST "${GLOBAL_DEFINITIONS}" )
+	foreach( def IN LISTS GLOBAL_DEFS_LIST )
+		if( def AND NOT def STREQUAL "" )
+			# Only process items that start with -D (preprocessor definitions)
+			if( def MATCHES "^-D" )
+				# Remove leading -D
+				string( REGEX REPLACE "^-D" "" clean_def "${def}" )
+				if( clean_def AND NOT clean_def STREQUAL "" )
+					target_compile_definitions( tools INTERFACE ${clean_def} )
+				endif()
+			endif()
+		endif()
+	endforeach()
+endif()
+
 target_link_libraries(tools INTERFACE
 	${GLOBAL_LIBRARIES}
 	${ZLIB_LIBRARIES}

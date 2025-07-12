@@ -23,7 +23,32 @@ include_directories( ${INCLUDE_DIRS} )
 add_executable( login-server ${SOURCE_FILES} )
 add_dependencies( login-server ${DEPENDENCIES} )
 target_link_libraries( login-server ${LIBRARIES} ${DEPENDENCIES} )
-set_target_properties( login-server PROPERTIES COMPILE_FLAGS "${DEFINITIONS}" )
+
+# Modern CMake: Use target_compile_definitions instead of COMPILE_FLAGS
+# Apply GLOBAL_DEFINITIONS properly - only preprocessor definitions, not compiler flags
+if( GLOBAL_DEFINITIONS )
+	# Parse GLOBAL_DEFINITIONS string and apply each definition
+	string( REPLACE " " ";" GLOBAL_DEFS_LIST "${GLOBAL_DEFINITIONS}" )
+	foreach( def IN LISTS GLOBAL_DEFS_LIST )
+		if( def AND NOT def STREQUAL "" )
+			# Only process items that start with -D (preprocessor definitions)
+			if( def MATCHES "^-D" )
+				# Remove leading -D
+				string( REGEX REPLACE "^-D" "" clean_def "${def}" )
+				if( clean_def AND NOT clean_def STREQUAL "" )
+					target_compile_definitions( login-server PRIVATE ${clean_def} )
+				endif()
+			endif()
+		endif()
+	endforeach()
+endif()
+
+# Apply COMMON_BASE_DEFINITIONS
+if( COMMON_BASE_DEFINITIONS )
+	target_compile_definitions( login-server PRIVATE ${COMMON_BASE_DEFINITIONS} )
+endif()
+
+target_include_directories( login-server PRIVATE ${INCLUDE_DIRS} )
 if( INSTALL_COMPONENT_RUNTIME )
 	cpack_add_component( Runtime_loginserver DESCRIPTION "login-server" DISPLAY_NAME "login-server" GROUP Runtime )
 	install( TARGETS login-server

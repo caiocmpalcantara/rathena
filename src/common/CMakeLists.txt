@@ -137,7 +137,7 @@ set( COMMON_BASE_DEFINITIONS
 	${LIBCONFIG_DEFINITIONS}
 	CACHE INTERNAL "common_base definitions" )
 set( LIBRARIES ${GLOBAL_LIBRARIES} ${ZLIB_LIBRARIES} yaml-cpp ryml )
-set( INCLUDE_DIRS ${GLOBAL_INCLUDE_DIRS} ${RA_INCLUDE_DIRS} ${YAML_INCLUDE_DIRS} ${ZLIB_INCLUDE_DIRS} ${COMMON_BASE_INCLUDE_DIRS} )
+set( INCLUDE_DIRS ${GLOBAL_INCLUDE_DIRS} ${RA_INCLUDE_DIRS} ${YAML_INCLUDE_DIRS} ${ZLIB_INCLUDE_DIRS} ${MYSQL_INCLUDE_DIRS} ${COMMON_BASE_INCLUDE_DIRS} )
 set( DEFINITIONS "${GLOBAL_DEFINITIONS} ${COMMON_BASE_DEFINITIONS}" )
 set( SOURCE_FILES ${COMMON_BASE_HEADERS} ${COMMON_BASE_SOURCES} )
 source_group( common FILES ${COMMON_BASE_HEADERS} ${COMMON_BASE_SOURCES} )
@@ -145,8 +145,31 @@ source_group( common FILES ${COMMON_BASE_HEADERS} ${COMMON_BASE_SOURCES} )
 add_library( common_base ${SOURCE_FILES} )
 #message( STATUS "common_base LIBRARIES=${LIBRARIES}, DEFINITIONS=${DEFINITIONS}")
 target_link_libraries( common_base ${LIBRARIES} )
-set_target_properties( common_base PROPERTIES COMPILE_FLAGS "${DEFINITIONS}" )
-include_directories( ${INCLUDE_DIRS} )
+
+# Modern CMake: Use target_compile_definitions instead of COMPILE_FLAGS
+target_compile_definitions( common_base PRIVATE ${LIBCONFIG_DEFINITIONS} )
+# Apply GLOBAL_DEFINITIONS properly - only preprocessor definitions, not compiler flags
+if( GLOBAL_DEFINITIONS )
+	# Parse GLOBAL_DEFINITIONS string and apply each definition
+	string( REPLACE " " ";" GLOBAL_DEFS_LIST "${GLOBAL_DEFINITIONS}" )
+	foreach( def IN LISTS GLOBAL_DEFS_LIST )
+		if( def AND NOT def STREQUAL "" )
+			# Only process items that start with -D (preprocessor definitions)
+			if( def MATCHES "^-D" )
+				# Remove leading -D
+				string( REGEX REPLACE "^-D" "" clean_def "${def}" )
+				if( clean_def AND NOT clean_def STREQUAL "" )
+					target_compile_definitions( common_base PRIVATE ${clean_def} )
+				endif()
+			endif()
+		endif()
+	endforeach()
+endif()
+
+target_include_directories( common_base PRIVATE ${INCLUDE_DIRS} )
+
+# Fix minicore include directories to include RA_INCLUDE_DIRS for config headers
+target_include_directories( minicore PRIVATE ${RA_INCLUDE_DIRS} )
 
 set( HAVE_common_base ON  CACHE INTERNAL "" )
 set( TARGET_LIST ${TARGET_LIST} common_base  CACHE INTERNAL "" )
@@ -171,7 +194,7 @@ set( COMMON_SOURCES
 	CACHE INTERNAL "common sources" )
 set( DEPENDENCIES common_base yaml-cpp ryml )
 set( LIBRARIES ${GLOBAL_LIBRARIES} ${MYSQL_LIBRARIES} )
-set( INCLUDE_DIRS ${GLOBAL_INCLUDE_DIRS} ${MYSQL_INCLUDE_DIRS} )
+set( INCLUDE_DIRS ${GLOBAL_INCLUDE_DIRS} ${MYSQL_INCLUDE_DIRS} ${LIBCONFIG_INCLUDE_DIRS} )
 set( DEFINITIONS "${GLOBAL_DEFINITIONS}" )
 set( SOURCE_FILES ${COMMON_HEADERS} ${COMMON_SOURCES} )
 source_group( common FILES ${COMMON_HEADERS} ${COMMON_SOURCES} )
@@ -180,8 +203,30 @@ add_library( common ${SOURCE_FILES} )
 #message( STATUS "common LIBRARIES=${LIBRARIES}, DEPENDENCIES=${DEPENDENCIES} DEFINITIONS=${DEFINITIONS}")
 add_dependencies( common ${DEPENDENCIES} )
 target_link_libraries( common ${LIBRARIES} ${DEPENDENCIES} )
-set_target_properties( common PROPERTIES COMPILE_FLAGS "${DEFINITIONS}" )
-include_directories( ${INCLUDE_DIRS} ${YAML_INCLUDE_DIRS} )
+
+# Modern CMake: Use target_compile_definitions instead of COMPILE_FLAGS
+# Apply GLOBAL_DEFINITIONS properly - only preprocessor definitions, not compiler flags
+if( GLOBAL_DEFINITIONS )
+	# Parse GLOBAL_DEFINITIONS string and apply each definition
+	string( REPLACE " " ";" GLOBAL_DEFS_LIST "${GLOBAL_DEFINITIONS}" )
+	foreach( def IN LISTS GLOBAL_DEFS_LIST )
+		if( def AND NOT def STREQUAL "" )
+			# Only process items that start with -D (preprocessor definitions)
+			if( def MATCHES "^-D" )
+				# Remove leading -D
+				string( REGEX REPLACE "^-D" "" clean_def "${def}" )
+				if( clean_def AND NOT clean_def STREQUAL "" )
+					target_compile_definitions( common PRIVATE ${clean_def} )
+				endif()
+			endif()
+		endif()
+	endforeach()
+endif()
+
+target_include_directories( common PRIVATE ${INCLUDE_DIRS} ${YAML_INCLUDE_DIRS} )
+
+# Fix common include directories to include RA_INCLUDE_DIRS for config headers
+target_include_directories( common PRIVATE ${RA_INCLUDE_DIRS} )
 
 set( HAVE_common ON  CACHE INTERNAL "" )
 set( TARGET_LIST ${TARGET_LIST} common  CACHE INTERNAL "" )

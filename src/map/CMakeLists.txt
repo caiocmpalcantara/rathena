@@ -33,7 +33,37 @@ add_executable( map-server ${SOURCE_FILES} )
 #message( STATUS "map-server LIBRARIES=${LIBRARIES}, DEPENDENCIES=${DEPENDENCIES} DEFINITIONS=${DEFINITIONS}")
 add_dependencies( map-server ${DEPENDENCIES} )
 target_link_libraries( map-server ${LIBRARIES} ${DEPENDENCIES} )
-set_target_properties( map-server PROPERTIES COMPILE_FLAGS "${DEFINITIONS}" )
+
+# Modern CMake: Use target_compile_definitions instead of COMPILE_FLAGS
+# Apply GLOBAL_DEFINITIONS properly - only preprocessor definitions, not compiler flags
+if( GLOBAL_DEFINITIONS )
+	# Parse GLOBAL_DEFINITIONS string and apply each definition
+	string( REPLACE " " ";" GLOBAL_DEFS_LIST "${GLOBAL_DEFINITIONS}" )
+	foreach( def IN LISTS GLOBAL_DEFS_LIST )
+		if( def AND NOT def STREQUAL "" )
+			# Only process items that start with -D (preprocessor definitions)
+			if( def MATCHES "^-D" )
+				# Remove leading -D
+				string( REGEX REPLACE "^-D" "" clean_def "${def}" )
+				if( clean_def AND NOT clean_def STREQUAL "" )
+					target_compile_definitions( map-server PRIVATE ${clean_def} )
+				endif()
+			endif()
+		endif()
+	endforeach()
+endif()
+
+# Apply COMMON_BASE_DEFINITIONS
+if( COMMON_BASE_DEFINITIONS )
+	target_compile_definitions( map-server PRIVATE ${COMMON_BASE_DEFINITIONS} )
+endif()
+
+# Apply PCRE support definition if enabled
+if( WITH_PCRE )
+	target_compile_definitions( map-server PRIVATE PCRE_SUPPORT )
+endif()
+
+target_include_directories( map-server PRIVATE ${INCLUDE_DIRS} )
 if( INSTALL_COMPONENT_RUNTIME )
 	cpack_add_component( Runtime_mapserver DESCRIPTION "map-server" DISPLAY_NAME "map-server" GROUP Runtime )
 	install( TARGETS map-server
