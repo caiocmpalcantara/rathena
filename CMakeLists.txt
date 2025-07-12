@@ -81,6 +81,51 @@ endif()
 
 
 #
+# Multi-threaded compilation support
+#
+# Include ProcessorCount module early
+include(ProcessorCount)
+
+option( ENABLE_PARALLEL_BUILD "Enable parallel compilation support (default=ON)" ON )
+set( PARALLEL_BUILD_JOBS "0" CACHE STRING "Number of parallel build jobs (0=auto-detect, default=0)" )
+
+if( ENABLE_PARALLEL_BUILD )
+	# Auto-detect number of CPU cores if not specified
+	if( PARALLEL_BUILD_JOBS EQUAL 0 )
+		ProcessorCount(N)
+		if( NOT N EQUAL 0 )
+			set( PARALLEL_BUILD_JOBS ${N} CACHE STRING "Number of parallel build jobs (0=auto-detect, default=0)" FORCE )
+			message( STATUS "Auto-detected ${N} CPU cores for parallel compilation" )
+		else()
+			set( PARALLEL_BUILD_JOBS 4 CACHE STRING "Number of parallel build jobs (0=auto-detect, default=0)" FORCE )
+			message( STATUS "Could not detect CPU cores, defaulting to 4 parallel jobs" )
+		endif()
+	else()
+		message( STATUS "Using ${PARALLEL_BUILD_JOBS} parallel build jobs" )
+	endif()
+
+	# Set parallel build properties for different generators
+	if( CMAKE_GENERATOR MATCHES "Visual Studio" )
+		# For Visual Studio, set the /MP flag for parallel compilation
+		set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /MP${PARALLEL_BUILD_JOBS}" )
+		set( CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /MP${PARALLEL_BUILD_JOBS}" )
+		message( STATUS "Enabled Visual Studio parallel compilation with ${PARALLEL_BUILD_JOBS} jobs" )
+	elseif( CMAKE_GENERATOR MATCHES "Makefiles" OR CMAKE_GENERATOR MATCHES "Ninja" )
+		# For Make and Ninja generators, parallel builds are controlled at build time
+		message( STATUS "Parallel compilation enabled. Use: cmake --build . -j${PARALLEL_BUILD_JOBS}" )
+	endif()
+
+	# Set global property to enable parallel builds
+	set_property( GLOBAL PROPERTY JOB_POOLS compile_pool=${PARALLEL_BUILD_JOBS} )
+
+	# Export parallel build variables for subdirectories
+	set( PARALLEL_BUILD_JOBS ${PARALLEL_BUILD_JOBS} CACHE INTERNAL "Parallel build jobs for subdirectories" )
+else()
+	message( STATUS "Parallel compilation disabled" )
+endif()
+
+
+#
 # Global stuff
 #
 set( GLOBAL_LIBRARIES ${LINK_LIBRARIES}  CACHE INTERNAL "" )# list (comma separated values)
@@ -97,6 +142,36 @@ endif()
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_COMPILER_IS_GNUCC)
   set_property( CACHE GLOBAL_DEFINITIONS  PROPERTY VALUE "${GLOBAL_DEFINITIONS} -fno-strict-aliasing" )
   #set_property( CACHE GLOBAL_DEFINITIONS  PROPERTY VALUE "${GLOBAL_DEFINITIONS} -O2" ); #need more test to enable this
+endif()
+
+# Parallel build optimizations
+if( ENABLE_PARALLEL_BUILD )
+	# Enable parallel compilation for GCC/Clang
+	if( CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang" )
+		# Use ccache if available for faster rebuilds
+		find_program( CCACHE_PROGRAM ccache )
+		if( CCACHE_PROGRAM )
+			set_property( GLOBAL PROPERTY RULE_LAUNCH_COMPILE "${CCACHE_PROGRAM}" )
+			message( STATUS "Found ccache: ${CCACHE_PROGRAM} - enabling for faster rebuilds" )
+		endif()
+
+		# Enable parallel linking if supported (gold linker or lld)
+		if( CMAKE_CXX_COMPILER_ID MATCHES "GNU" )
+			execute_process( COMMAND ${CMAKE_CXX_COMPILER} -fuse-ld=gold -Wl,--version ERROR_QUIET OUTPUT_VARIABLE LD_VERSION )
+			if( "${LD_VERSION}" MATCHES "GNU gold" )
+				set( CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fuse-ld=gold" )
+				set( CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -fuse-ld=gold" )
+				message( STATUS "Using GNU gold linker for faster linking" )
+			endif()
+		elseif( CMAKE_CXX_COMPILER_ID MATCHES "Clang" )
+			execute_process( COMMAND ${CMAKE_CXX_COMPILER} -fuse-ld=lld -Wl,--version ERROR_QUIET OUTPUT_VARIABLE LD_VERSION )
+			if( "${LD_VERSION}" MATCHES "LLD" )
+				set( CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fuse-ld=lld" )
+				set( CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -fuse-ld=lld" )
+				message( STATUS "Using LLVM lld linker for faster linking" )
+			endif()
+		endif()
+	endif()
 endif()
 
 

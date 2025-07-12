@@ -26,8 +26,8 @@ help:
 
 obj:
 	@echo "	MKDIR	obj"
-	@-mkdir obj
-	
+	@-mkdir -p obj
+
 obj/%.o: %.c $(LIBCONFIG_H)
 	@echo "	CC	$<"
 	@@CC@ @CFLAGS_AR@ @DEFS@ @CPPFLAGS@ -c $(OUTPUT_OPTION) $<
@@ -37,3 +37,6 @@ libconfig: obj $(LIBCONFIG_DIR_OBJ) $(LIBCONFIG_AR)
 $(LIBCONFIG_AR): $(LIBCONFIG_DIR_OBJ)
 	@echo "	AR	$@"
 	@@AR@ rcs obj/libconfig.a $(LIBCONFIG_DIR_OBJ)
+
+# Ensure object files depend on obj directory for parallel builds
+$(LIBCONFIG_DIR_OBJ): | obj

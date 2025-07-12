@@ -481,6 +481,38 @@ AC_PROG_CXX
 AC_PATH_PROG(AR, ar)
 AC_LANG([C++])
 
+# Parallel build support
+AC_ARG_ENABLE([parallel-build],
+    [AS_HELP_STRING([--enable-parallel-build], [Enable parallel build optimizations (default=yes)])],
+    [enable_parallel_build=$enableval],
+    [enable_parallel_build=yes])
+
+AC_ARG_WITH([parallel-jobs],
+    [AS_HELP_STRING([--with-parallel-jobs=N], [Number of parallel build jobs (default=auto)])],
+    [parallel_jobs=$withval],
+    [parallel_jobs=auto])
+
+if test "x$enable_parallel_build" = "xyes"; then
+    AC_MSG_CHECKING([for optimal number of parallel jobs])
+
+    if test "x$parallel_jobs" = "xauto"; then
+        # Try to detect number of CPU cores
+        if test -r /proc/cpuinfo; then
+            parallel_jobs=`grep -c ^processor /proc/cpuinfo`
+        elif command -v sysctl >/dev/null 2>&1; then
+            parallel_jobs=`sysctl -n hw.ncpu 2>/dev/null || echo 4`
+        else
+            parallel_jobs=4
+        fi
+    fi
+
+    AC_MSG_RESULT([$parallel_jobs])
+    AC_MSG_NOTICE([Parallel build enabled with $parallel_jobs jobs])
+    AC_MSG_NOTICE([Use 'make -j$parallel_jobs' to build with parallel compilation])
+else
+    AC_MSG_NOTICE([Parallel build optimizations disabled])
+fi
+
 CFLAGS="$CFLAGS -pipe -ffast-math -Wall"
 CPPFLAGS="$CPPFLAGS -I../common"
 CXXFLAGS="$CXXFLAGS -std=c++17"

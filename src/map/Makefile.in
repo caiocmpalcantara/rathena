@@ -76,11 +76,11 @@ needs_mysql:
 
 obj:
 	@echo "	MKDIR	obj"
-	@-mkdir obj
+	@-mkdir -p obj
 
 obj-gen:
-	@echo "	MDIR	obj-gen"
-	@-mkdir obj-gen
+	@echo "	MKDIR	obj-gen"
+	@-mkdir -p obj-gen
 
 # executables
 
@@ -88,10 +88,13 @@ map-server: obj $(MAP_DIR_OBJ) $(COMMON_AR) $(LIBCONFIG_AR) $(RAPIDYAML_AR)
 	@echo "	LD	@OMAP@@EXEEXT@"
 	@@CXX@ @LDFLAGS@ -o ../../@OMAP@@EXEEXT@ $(MAP_DIR_OBJ) $(COMMON_AR) $(LIBCONFIG_AR) $(RAPIDYAML_AR) @LIBS@ @PCRE_LIBS@ @MYSQL_LIBS@
 
-
 map-server-generator: obj-gen $(MAP_GEN_DIR_OBJ) $(COMMON_AR) $(LIBCONFIG_AR) $(RAPIDYAML_AR)
 	@echo "	LD	map-server-generator@EXEEXT@"
 	@@CXX@ @LDFLAGS@ -o ../../map-server-generator@EXEEXT@ $(MAP_GEN_DIR_OBJ) $(COMMON_AR) $(LIBCONFIG_AR) $(RAPIDYAML_AR) @LIBS@ @PCRE_LIBS@ @MYSQL_LIBS@
+
+# Ensure object files depend on their respective directories for parallel builds
+$(MAP_DIR_OBJ): | obj
+$(MAP_GEN_DIR_OBJ): | obj-gen
 
 
 # map object files

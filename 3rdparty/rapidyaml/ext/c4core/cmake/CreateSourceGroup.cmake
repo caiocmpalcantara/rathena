@@ -13,18 +13,13 @@
 # and add a link here.
 
 macro(create_source_group GroupPrefix RootDir ProjectSources)
+  # Disable source grouping to avoid regex path issues with special characters
+  # This is a workaround for CMake regex compilation errors when paths contain
+  # special characters like ++ which are interpreted as regex metacharacters
+
+  # Simply group all sources under the main prefix to avoid path processing
   set(DirSources ${ProjectSources})
   foreach(Source ${DirSources})
-    #message(STATUS "s=${Source}")
-    string(REGEX REPLACE "${RootDir}" "" RelativePath "${Source}")
-    #message(STATUS "  ${RelativePath}")
-    string(REGEX REPLACE "[\\\\/][^\\\\/]*$" "" RelativePath "${RelativePath}")
-    #message(STATUS "  ${RelativePath}")
-    string(REGEX REPLACE "^[\\\\/]" "" RelativePath "${RelativePath}")
-    #message(STATUS "  ${RelativePath}")
-    string(REGEX REPLACE "/" "\\\\\\\\" RelativePath "${RelativePath}")
-    #message(STATUS "  ${RelativePath}")
-    source_group("${GroupPrefix}\\${RelativePath}" FILES ${Source})
-    #message(STATUS "  ${Source}")
+    source_group("${GroupPrefix}" FILES ${Source})
   endforeach(Source)
 endmacro(create_source_group)

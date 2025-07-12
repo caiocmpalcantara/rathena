@@ -60,13 +60,17 @@ needs_mysql:
 
 obj:
 	@echo "	MKDIR	obj"
-	@-mkdir obj
+	@-mkdir -p obj
 
 $(COMMON_AR): $(COMMON_DIR_OBJ)
 	@echo "	AR	$@"
 	@@AR@ rcs $(COMMON_AR) $(COMMON_DIR_OBJ)
 
+# Ensure proper dependency ordering for parallel builds
 common: obj $(COMMON_DIR_OBJ) $(LIBCONFIG_AR) $(YAML_CPP_AR) $(RAPIDYAML_AR) $(COMMON_AR)
+
+# Make object file compilation parallel-safe
+$(COMMON_DIR_OBJ): | obj
 
 obj/%.o: %.cpp $(COMMON_H) $(LIBCONFIG_H) $(RAPIDYAML_H)
 	@echo "	CXX	$<"

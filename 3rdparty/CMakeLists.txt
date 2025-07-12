@@ -47,11 +47,26 @@ macro( CONFIGURE_WITH_LOCAL_OR_SYSTEM name )
 endmacro( CONFIGURE_WITH_LOCAL_OR_SYSTEM )
 
 
+# Add 3rdparty libraries
+# These can be built in parallel as they have minimal interdependencies
+
+# Fix for rapidyaml regex path issues in CMake
+# Disable source grouping to avoid regex compilation errors
+set( RYML_WITH_TAB_TOKENS OFF CACHE BOOL "Disable tab tokens to avoid regex issues" )
+set( C4_DISABLE_SOURCE_GROUPS ON CACHE BOOL "Disable source groups to avoid regex path issues" )
+
 add_subdirectory( httplib )
 add_subdirectory( json )
 add_subdirectory( libconfig )
 add_subdirectory( mysql )
 add_subdirectory( pcre )
-add_subdirectory( rapidyaml )
+add_subdirectory( rapidyaml )  # Note: rapidyaml depends on c4core internally
 add_subdirectory( yaml-cpp )
 add_subdirectory( zlib )
+
+# Set parallel build properties for 3rdparty targets if enabled
+if( ENABLE_PARALLEL_BUILD AND PARALLEL_BUILD_JOBS GREATER 1 )
+	# Most 3rdparty libraries can build in parallel
+	# rapidyaml has internal dependencies but handles them correctly
+	message( STATUS "3rdparty libraries configured for parallel builds" )
+endif()

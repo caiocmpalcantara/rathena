@@ -31,7 +31,7 @@ help:
 obj:
 	@echo "	MKDIR	obj"
 	@mkdir -p obj
-	
+
 obj/%.o: %.cc $(HTTPLIB_H)
 	@echo "	CXX	$<"
 	@@CXX@ $(CXXFLAG) @CFLAGS_AR@ @CPPFLAGS@ -DCPPHTTPLIB_SEND_FLAGS=MSG_NOSIGNAL -g -c $(OUTPUT_OPTION) $<
@@ -41,3 +41,6 @@ httplib: obj $(HTTPLIB_DIR_OBJ) $(HTTPLIB_AR)
 $(HTTPLIB_AR): $(HTTPLIB_DIR_OBJ)
 	@echo "	AR	$@"
 	@@AR@ rcs obj/httplib.a $(HTTPLIB_DIR_OBJ)
+
+# Ensure object files depend on obj directory for parallel builds
+$(HTTPLIB_DIR_OBJ): | obj

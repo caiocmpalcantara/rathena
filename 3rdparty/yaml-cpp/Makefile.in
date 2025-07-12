@@ -30,7 +30,7 @@ help:
 obj:
 	@echo "	MKDIR	obj/src/contrib"
 	@mkdir -p obj/src/contrib
-	
+
 obj/%.o: %.cpp $(YAML_CPP_H)
 	@echo "	CXX	$<"
 	@@CXX@ $(CXXFLAG) @CFLAGS_AR@ @CPPFLAGS@ -g $(INC) -c $(OUTPUT_OPTION) $<
@@ -40,3 +40,6 @@ yaml-cpp: obj $(YAML_CPP_DIR_OBJ) $(YAML_CPP_AR)
 $(YAML_CPP_AR): $(YAML_CPP_DIR_OBJ)
 	@echo "	AR	$@"
 	@@AR@ rcs obj/yaml-cpp.a $(YAML_CPP_DIR_OBJ)
+
+# Ensure object files depend on obj directory for parallel builds
+$(YAML_CPP_DIR_OBJ): | obj

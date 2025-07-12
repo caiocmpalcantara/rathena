@@ -42,3 +42,6 @@ rapidyaml: obj $(RAPIDYAML_DIR_OBJ) $(RAPIDYAML_AR)
 $(RAPIDYAML_AR): $(RAPIDYAML_DIR_OBJ)
 	@echo "	AR	$@"
 	@@AR@ rcs obj/ryml.a $(RAPIDYAML_DIR_OBJ)
+
+# Ensure object files depend on obj directory for parallel builds
+$(RAPIDYAML_DIR_OBJ): | obj

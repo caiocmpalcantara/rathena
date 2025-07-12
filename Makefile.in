@@ -1,15 +1,23 @@
 @SET_MAKE@
 
+# Parallel build support
+# Use MAKEFLAGS to pass -j option to sub-makes automatically
+# This enables parallel builds with make -j<N>
+MAKEFLAGS += --no-print-directory
+
 HAVE_MYSQL=@HAVE_MYSQL@
 OMAP=@OMAP@
 ifeq ($(HAVE_MYSQL),yes)
 	ALL_DEPENDS=server tools
 	SERVER_DEPENDS=common login char map web import
+	# 3rdparty dependencies - these can build in parallel
 	COMMON_DEPENDS=libconfig rapidyaml yaml-cpp
 	LOGIN_DEPENDS=libconfig common
 	CHAR_DEPENDS=libconfig common rapidyaml
 	MAP_DEPENDS=libconfig common rapidyaml
 	WEB_DEPENDS=libconfig common yaml-cpp httplib
+	# Tools only depend on minicore, can build in parallel with servers
+	TOOLS_DEPENDS=libconfig
 else
 	ALL_DEPENDS=needs_mysql
 	SERVER_DEPENDS=needs_mysql
@@ -18,6 +26,7 @@ else
 	CHAR_DEPENDS=needs_mysql
 	MAP_DEPENDS=needs_mysql
 	WEB_DEPENDS=needs_mysql
+	TOOLS_DEPENDS=needs_mysql
 endif
 
 
@@ -40,9 +49,24 @@ sql: $(SERVER_DEPENDS)
 
 server: $(SERVER_DEPENDS)
 
+# Build 3rdparty libraries first (can be built in parallel)
+libconfig:
+	@$(MAKE) -C 3rdparty/libconfig
+
+rapidyaml:
+	@$(MAKE) -C 3rdparty/rapidyaml
+
+yaml-cpp:
+	@$(MAKE) -C 3rdparty/yaml-cpp
+
+httplib:
+	@$(MAKE) -C 3rdparty/httplib
+
+# Build common library (required by all servers)
 common: $(COMMON_DEPENDS)
 	@$(MAKE) -C src/common server
 
+# Server targets (can build in parallel once common is ready)
 login: $(LOGIN_DEPENDS)
 	@$(MAKE) -C src/login server
 
@@ -55,21 +79,22 @@ map: $(MAP_DEPENDS)
 web: $(WEB_DEPENDS)
 	@$(MAKE) -C src/web server
 
-libconfig:
-	@$(MAKE) -C 3rdparty/libconfig
-
-tools:
+# Tools (can build in parallel with servers, only needs libconfig)
+tools: $(TOOLS_DEPENDS)
 	@$(MAKE) -C src/tool
 	@$(MAKE) -C src/map tools
 
-rapidyaml:
-	@$(MAKE) -C 3rdparty/rapidyaml
+# Parallel build targets for 3rdparty libraries
+.PHONY: 3rdparty-parallel
+3rdparty-parallel:
+	@echo "Building 3rdparty libraries in parallel..."
+	@$(MAKE) -j libconfig rapidyaml yaml-cpp httplib
 
-yaml-cpp:
-	@$(MAKE) -C 3rdparty/yaml-cpp
-
-httplib:
-	@$(MAKE) -C 3rdparty/httplib
+# Parallel build targets for servers (after common is built)
+.PHONY: servers-parallel
+servers-parallel: common
+	@echo "Building servers in parallel..."
+	@$(MAKE) -j login char map web
 
 import:
 # 1) create conf/import folder
@@ -87,6 +112,7 @@ import:
 	@rm -rf db/import/.svn
 
 clean:
+	@echo "Cleaning all build artifacts..."
 	@$(MAKE) -C src/common $@
 	@$(MAKE) -C 3rdparty/libconfig $@
 	@$(MAKE) -C 3rdparty/rapidyaml $@
@@ -97,6 +123,22 @@ clean:
 	@$(MAKE) -C src/map $@
 	@$(MAKE) -C src/web $@
 	@$(MAKE) -C src/tool $@
+
+# Parallel clean (faster for large projects)
+.PHONY: clean-parallel
+clean-parallel:
+	@echo "Cleaning all build artifacts in parallel..."
+	@$(MAKE) -j -C src/common clean & \
+	 $(MAKE) -j -C 3rdparty/libconfig clean & \
+	 $(MAKE) -j -C 3rdparty/rapidyaml clean & \
+	 $(MAKE) -j -C 3rdparty/yaml-cpp clean & \
+	 $(MAKE) -j -C 3rdparty/httplib clean & \
+	 $(MAKE) -j -C src/login clean & \
+	 $(MAKE) -j -C src/char clean & \
+	 $(MAKE) -j -C src/map clean & \
+	 $(MAKE) -j -C src/web clean & \
+	 $(MAKE) -j -C src/tool clean & \
+	 wait
 
 help:
 	@echo "most common targets are 'all' 'server' 'conf' 'clean' 'help'"
@@ -114,11 +156,24 @@ help:
 	@echo "'import'      - builds conf/import, conf/msg_conf/import and db/import folders from their template folders (x-tmpl)"
 	@echo "'all'         - builds all the above targets"
 	@echo "'server'      - builds servers (targets 'common' 'login' 'char' 'map' and 'import')"
-	@echo "'clean'       - cleans builds and objects"
-	@echo "'install'     - run installer which sets up rathena in /opt/"
-	@echo "'bin-clean'   - deletes installed binaries"
-	@echo "'uninstall'   - run uninstaller which erases all installation changes"
-	@echo "'help'        - outputs this message"
+	@echo "'clean'            - cleans builds and objects"
+	@echo "'clean-parallel'   - cleans builds and objects in parallel (faster)"
+	@echo "'3rdparty-parallel'- builds 3rdparty libraries in parallel"
+	@echo "'servers-parallel' - builds servers in parallel (after common)"
+	@echo "'install'          - run installer which sets up rathena in /opt/"
+	@echo "'bin-clean'        - deletes installed binaries"
+	@echo "'uninstall'        - run uninstaller which erases all installation changes"
+	@echo "'help'             - outputs this message"
+	@echo ""
+	@echo "PARALLEL BUILD USAGE:"
+	@echo "  make -j<N> server    # Build with N parallel jobs"
+	@echo "  make -j8 all         # Build everything with 8 parallel jobs"
+	@echo "  make -j\$$(nproc) server # Build with all available CPU cores"
+	@echo ""
+	@echo "EXAMPLES:"
+	@echo "  make -j4 server      # Build servers with 4 parallel jobs"
+	@echo "  make -j20 all        # Build everything with 20 parallel jobs"
+	@echo "  ./build-parallel.sh  # Use the parallel build script (recommended)"
 
 needs_mysql:
 	@echo "MySQL not found or disabled by the configure script"
