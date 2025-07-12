@@ -195,6 +195,59 @@ if( PACKETVER )
 	list( APPEND GLOBAL_DEFINITIONS  PACKETVER=${PACKETVER} )
 endif()
 
+#
+# rAthena Configure Options Compatibility Layer
+# This section provides CMake equivalents for traditional autotools configure options
+#
+
+# Game mode options
+option( ENABLE_RENEWAL "Enable renewal mode (default=ON)" ON )
+option( ENABLE_PRERE "Enable pre-renewal mode (default=OFF)" OFF )
+
+# Validate game mode options (mutually exclusive)
+if( ENABLE_RENEWAL AND ENABLE_PRERE )
+	message( FATAL_ERROR "Cannot enable both renewal and pre-renewal modes. Choose one." )
+endif()
+
+if( ENABLE_PRERE )
+	set_property( CACHE GLOBAL_DEFINITIONS  PROPERTY VALUE "${GLOBAL_DEFINITIONS} -DPRERE" )
+	message( STATUS "Enabled pre-renewal mode" )
+elseif( ENABLE_RENEWAL )
+	# Renewal is the default, so we don't need to define anything special
+	# The source code's renewal.hpp will handle the default RENEWAL definition
+	message( STATUS "Enabled renewal mode (default)" )
+endif()
+
+# VIP features
+option( ENABLE_VIP "Enable VIP features (default=OFF)" OFF )
+if( ENABLE_VIP )
+	set_property( CACHE GLOBAL_DEFINITIONS  PROPERTY VALUE "${GLOBAL_DEFINITIONS} -DVIP_ENABLE" )
+	message( STATUS "Enabled VIP features" )
+endif()
+
+# Warning flags
+option( ENABLE_WARN "Enable compiler warnings (default=OFF)" OFF )
+if( ENABLE_WARN )
+	if( CMAKE_C_COMPILER_ID STREQUAL "GNU" OR CMAKE_C_COMPILER_ID STREQUAL "Clang" )
+		set_property( CACHE CMAKE_C_FLAGS  PROPERTY VALUE "${CMAKE_C_FLAGS} -Wall -Wextra" )
+		set_property( CACHE CMAKE_CXX_FLAGS  PROPERTY VALUE "${CMAKE_CXX_FLAGS} -Wall -Wextra" )
+		message( STATUS "Enabled compiler warnings" )
+	endif()
+endif()
+
+# Maximum connections
+set( MAXCONN CACHE STRING "Maximum connections (default=16384)" )
+if( MAXCONN )
+	set_property( CACHE GLOBAL_DEFINITIONS  PROPERTY VALUE "${GLOBAL_DEFINITIONS} -DFD_SETSIZE=${MAXCONN}" )
+	message( STATUS "Set maximum connections to ${MAXCONN}" )
+endif()
+
+# Output executable names
+set( OUTPUT_LOGIN "login-server" CACHE STRING "Login server executable name (default=login-server)" )
+set( OUTPUT_CHAR "char-server" CACHE STRING "Char server executable name (default=char-server)" )
+set( OUTPUT_MAP "map-server" CACHE STRING "Map server executable name (default=map-server)" )
+set( OUTPUT_WEB "web-server" CACHE STRING "Web server executable name (default=web-server)" )
+
 
 #
 # Find git
@@ -368,23 +421,38 @@ endif()
 
 
 #
-# Enable extra debug code (default=OFF)
+# Enable debug code (default=OFF)
+# Provides compatibility with --enable-debug configure option
 #
+option( ENABLE_DEBUG "enable debug code (default=OFF)" OFF )
 option( ENABLE_EXTRA_DEBUG_CODE "enable extra debug code (default=OFF)" OFF )
-if( ENABLE_EXTRA_DEBUG_CODE )
+
+if( ENABLE_DEBUG OR ENABLE_EXTRA_DEBUG_CODE )
 	set_property( CACHE GLOBAL_DEFINITIONS  PROPERTY VALUE "${GLOBAL_DEFINITIONS} -DDEBUG" )
-	message( STATUS "Enabled extra DEBUG code" )
+	if( ENABLE_DEBUG )
+		message( STATUS "Enabled DEBUG code (configure compatibility)" )
+	endif()
+	if( ENABLE_EXTRA_DEBUG_CODE )
+		message( STATUS "Enabled extra DEBUG code" )
+	endif()
 endif()
 
 
 #
 # Enable EPOLL (default=OFF)
-# Only for Linux
+# Only for Linux - provides compatibility with --enable-epoll configure option
 #
+option( ENABLE_EPOLL "enable epoll(4) on Linux (default=OFF)" OFF )
 option( ENABLE_EXTRA_SOCKET_POLL "enable SOCKET_EPOLL (default=OFF)" OFF )
-if( ENABLE_EXTRA_SOCKET_POLL )
+
+if( ENABLE_EPOLL OR ENABLE_EXTRA_SOCKET_POLL )
 	set_property( CACHE GLOBAL_DEFINITIONS  PROPERTY VALUE "${GLOBAL_DEFINITIONS} -DSOCKET_EPOLL" )
-	message( STATUS "Enabled SOCKET_EPOLL" )
+	if( ENABLE_EPOLL )
+		message( STATUS "Enabled epoll (configure compatibility)" )
+	endif()
+	if( ENABLE_EXTRA_SOCKET_POLL )
+		message( STATUS "Enabled SOCKET_EPOLL" )
+	endif()
 endif()
 
 

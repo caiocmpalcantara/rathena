@@ -13,6 +13,7 @@ CLEAN=false
 INSTALL=false
 USE_CMAKE=true
 VERBOSE=false
+CONFIGURE_ARGS=""
 
 # Colors for output
 RED='\033[0;31m'
@@ -56,7 +57,7 @@ show_usage() {
     cat << EOF
 rAthena Parallel Build Script
 
-Usage: $0 [OPTIONS]
+Usage: $0 [OPTIONS] [-- CONFIGURE_OPTIONS]
 
 OPTIONS:
     -j, --jobs NUM          Number of parallel jobs (default: auto-detect)
@@ -68,18 +69,40 @@ OPTIONS:
     -v, --verbose           Verbose output
     -h, --help              Show this help message
 
+CONFIGURE OPTIONS (for traditional make builds):
+    All rAthena configure options supported after '--'
+
+    Examples:
+    --enable-packetver=VER  Set packet version
+    --enable-prere          Enable pre-renewal mode
+    --enable-debug          Enable debug mode
+    --enable-vip            Enable VIP features
+    --with-mysql=PATH       MySQL path
+
 EXAMPLES:
-    $0                      # Build with auto-detected cores
-    $0 -j 8                 # Build with 8 parallel jobs
-    $0 -j 20 -t Debug      # Debug build with 20 jobs
-    $0 -c -i               # Clean build and install
-    $0 -m -j 16            # Use traditional make with 16 jobs
+    $0                                          # Auto-detect cores, default config
+    $0 -j 8                                     # 8 parallel jobs
+    $0 -j 20 -t Debug                          # Debug build with 20 jobs
+    $0 -m -- --enable-prere --enable-packetver=20180620  # Pre-renewal build
+    $0 -c -i                                    # Clean build and install
+    $0 -m -j 16 -- --enable-debug --enable-vip # Make with debug and VIP
+
+NOTE: Configure options only work with traditional make (-m).
+      CMake uses its own configuration system.
 
 EOF
 }
 
 # Parse command line arguments
+configure_mode=false
 while [[ $# -gt 0 ]]; do
+    if [ "$configure_mode" = true ]; then
+        # Everything after -- goes to configure
+        CONFIGURE_ARGS="$CONFIGURE_ARGS $1"
+        shift
+        continue
+    fi
+
     case $1 in
         -j|--jobs)
             JOBS="$2"
@@ -113,6 +136,10 @@ while [[ $# -gt 0 ]]; do
             show_usage
             exit 0
             ;;
+        --)
+            configure_mode=true
+            shift
+            ;;
         *)
             print_error "Unknown option: $1"
             show_usage
@@ -140,6 +167,8 @@ case $BUILD_TYPE in
         ;;
 esac
 
+
+
 print_info "Build configuration:"
 print_info "  Build system: $([ "$USE_CMAKE" = true ] && echo "CMake" || echo "Traditional Make")"
 print_info "  Build type: $BUILD_TYPE"
@@ -163,6 +192,11 @@ fi
 if [ "$USE_CMAKE" = true ]; then
     # CMake build
     print_info "Starting CMake build..."
+
+    # Handle configure arguments with CMake
+    if [ -n "$CONFIGURE_ARGS" ]; then
+        print_info "Translating configure arguments for CMake build..."
+    fi
     
     # Create build directory
     mkdir -p "$BUILD_DIR"
@@ -175,11 +209,62 @@ if [ "$USE_CMAKE" = true ]; then
         -DENABLE_PARALLEL_BUILD=ON
         -DPARALLEL_BUILD_JOBS="$JOBS"
     )
-    
+
     if [ "$VERBOSE" = true ]; then
         CMAKE_ARGS+=(-DCMAKE_VERBOSE_MAKEFILE=ON)
     fi
-    
+
+    # Translate configure arguments to CMake arguments
+    if [ -n "$CONFIGURE_ARGS" ]; then
+        # Parse configure arguments directly into CMAKE_ARGS
+        for arg in $CONFIGURE_ARGS; do
+            case $arg in
+                --enable-prere|--enable-prere=yes)
+                    CMAKE_ARGS+=(-DENABLE_PRERE=ON)
+                    CMAKE_ARGS+=(-DENABLE_RENEWAL=OFF)
+                    print_info "  Translated: $arg -> -DENABLE_PRERE=ON -DENABLE_RENEWAL=OFF"
+                    ;;
+                --enable-renewal|--enable-renewal=yes)
+                    CMAKE_ARGS+=(-DENABLE_RENEWAL=ON)
+                    CMAKE_ARGS+=(-DENABLE_PRERE=OFF)
+                    print_info "  Translated: $arg -> -DENABLE_RENEWAL=ON -DENABLE_PRERE=OFF"
+                    ;;
+                --enable-packetver=*)
+                    local packetver="${arg#*=}"
+                    CMAKE_ARGS+=(-DPACKETVER="$packetver")
+                    print_info "  Translated: $arg -> -DPACKETVER=$packetver"
+                    ;;
+                --enable-debug|--enable-debug=yes)
+                    CMAKE_ARGS+=(-DENABLE_DEBUG=ON)
+                    print_info "  Translated: $arg -> -DENABLE_DEBUG=ON"
+                    ;;
+                --enable-vip|--enable-vip=yes)
+                    CMAKE_ARGS+=(-DENABLE_VIP=ON)
+                    print_info "  Translated: $arg -> -DENABLE_VIP=ON"
+                    ;;
+                --enable-warn|--enable-warn=yes)
+                    CMAKE_ARGS+=(-DENABLE_WARN=ON)
+                    print_info "  Translated: $arg -> -DENABLE_WARN=ON"
+                    ;;
+                --enable-epoll|--enable-epoll=yes)
+                    CMAKE_ARGS+=(-DENABLE_EPOLL=ON)
+                    print_info "  Translated: $arg -> -DENABLE_EPOLL=ON"
+                    ;;
+                --with-maxconn=*)
+                    local maxconn="${arg#*=}"
+                    CMAKE_ARGS+=(-DMAXCONN="$maxconn")
+                    print_info "  Translated: $arg -> -DMAXCONN=$maxconn"
+                    ;;
+                --with-mysql=*|--with-pcre=*|--with-zlib=*)
+                    print_warning "  Library path option $arg not directly translatable to CMake"
+                    ;;
+                *)
+                    print_warning "  Unknown configure option: $arg (ignored)"
+                    ;;
+            esac
+        done
+    fi
+
     cmake "${CMAKE_ARGS[@]}" ..
     
     # Build
@@ -202,10 +287,15 @@ else
     # Traditional make build
     print_info "Starting traditional make build..."
     
-    # Check if configure has been run
-    if [ ! -f "Makefile" ]; then
-        print_info "Running configure script..."
-        ./configure
+    # Check if configure has been run or if we have custom arguments
+    if [ ! -f "Makefile" ] || [ -n "$CONFIGURE_ARGS" ]; then
+        if [ -n "$CONFIGURE_ARGS" ]; then
+            print_info "Running configure script with custom options: $CONFIGURE_ARGS"
+            ./configure $CONFIGURE_ARGS
+        else
+            print_info "Running configure script with default options..."
+            ./configure
+        fi
     fi
     
     # Build with parallel jobs

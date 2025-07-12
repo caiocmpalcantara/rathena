@@ -7,6 +7,7 @@ This guide explains how to use the multi-threaded compilation features in rAthen
 - [Overview](#overview)
 - [Quick Start](#quick-start)
 - [Build Systems](#build-systems)
+- [Configure Options Integration](#configure-options-integration)
 - [Configuration](#configuration)
 - [Performance](#performance)
 - [Troubleshooting](#troubleshooting)
@@ -31,18 +32,32 @@ Typical speedup with parallel builds:
 
 ## Quick Start
 
-### Option 1: Automated Setup (Recommended)
+### Option 1: Enhanced Script with Configure Options (Recommended)
 
 ```bash
-# Configure optimal settings automatically
+# Basic parallel build
+./configure-parallel.sh -j 8
+
+# Pre-renewal with specific packet version
+./configure-parallel.sh -m -j 8 -- --enable-prere --enable-packetver=20180620
+
+# Debug build with VIP features
+./configure-parallel.sh -m -j 8 -- --enable-debug --enable-vip
+
+# Or use the parallel build script
+./build-parallel.sh -j 8
+./build-parallel.sh -m -j 8 -- --enable-debug --enable-warn
+```
+
+### Option 1b: Legacy Automated Setup
+
+```bash
+# Configure optimal settings automatically (legacy method)
 ./configure-parallel.sh
 
 # Use the generated configuration
 source ./build-config.sh
 rathena_build_cmake Release
-
-# Or use the parallel build script
-./build-parallel.sh -j 8
 ```
 
 ### Option 2: Manual CMake Build
@@ -112,6 +127,57 @@ make clean-parallel
 | `--enable-parallel-build` | Enable parallel build optimizations |
 | `--with-parallel-jobs=N` | Set default number of jobs |
 | `--disable-parallel-build` | Disable parallel optimizations |
+
+## Configure Options Integration
+
+The parallel build system integrates seamlessly with rAthena's traditional configure options.
+
+### Traditional Make (Full Configure Support)
+
+Use traditional make (`-m` flag) for full configure option support:
+
+```bash
+# Pre-renewal mode with specific packet version
+./configure-parallel.sh -m -j 8 -- --enable-prere --enable-packetver=20180620
+
+# Debug build with VIP features
+./build-parallel.sh -m -j 8 -- --enable-debug --enable-vip
+
+# Custom MySQL installation
+./configure-parallel.sh -m -j 12 -- --with-mysql=/usr/local/mysql
+```
+
+### CMake (Limited Configure Support)
+
+CMake builds use their own configuration system and don't support traditional configure options:
+
+```bash
+# CMake build (configure options ignored)
+./build-parallel.sh -j 8
+
+# For configure options, use traditional make instead
+./build-parallel.sh -m -j 8 -- --enable-debug
+```
+
+### Common Configure Options
+
+| Option | Description | Example |
+|--------|-------------|---------|
+| `--enable-prere` | Pre-renewal mode | `--enable-prere` |
+| `--enable-packetver=VER` | Packet version | `--enable-packetver=20180620` |
+| `--enable-debug` | Debug mode | `--enable-debug` |
+| `--enable-vip` | VIP features | `--enable-vip` |
+| `--with-mysql=PATH` | MySQL path | `--with-mysql=/usr/local/mysql` |
+
+### Syntax
+
+Use `--` to separate parallel options from configure options:
+
+```bash
+script [PARALLEL_OPTIONS] -- [CONFIGURE_OPTIONS]
+```
+
+For detailed configure integration, see [CONFIGURE_INTEGRATION.md](CONFIGURE_INTEGRATION.md).
 
 ## Configuration
 
