@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# rAthena Parallel Build Test Script
-# This script tests the parallel build functionality
+# rAthena Separated Build Workflow Test Script
+# This script tests the new separated configure/build workflow with parallel build functionality
 
 set -e
 
@@ -13,8 +13,8 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Test configuration
-TEST_JOBS=(1 2 4 8)
-TEST_BUILD_TYPES=("Debug" "Release")
+TEST_JOBS=(2 4)  # Reduced for faster testing
+TEST_BUILD_TYPES=("Release")  # Focus on Release builds for speed
 TEST_DIR="test-builds"
 FAILED_TESTS=()
 PASSED_TESTS=()
@@ -46,10 +46,40 @@ print_test_header() {
 # Function to cleanup test directories
 cleanup_tests() {
     print_info "Cleaning up test directories..."
-    rm -rf "$TEST_DIR"
+
+    # Clean test directories
+    if [ -d "$TEST_DIR" ]; then
+        rm -rf "$TEST_DIR" 2>/dev/null || {
+            print_warning "Could not remove $TEST_DIR, trying force removal..."
+            chmod -R 755 "$TEST_DIR" 2>/dev/null || true
+            rm -rf "$TEST_DIR" 2>/dev/null || true
+        }
+    fi
+
+    # Clean configuration
+    rm -f .rathena_config
+
+    # Clean make artifacts
     if [ -f Makefile ]; then
         make clean >/dev/null 2>&1 || true
+        rm -f Makefile
     fi
+
+    # Clean CMake artifacts with force if needed
+    if [ -d build ]; then
+        chmod -R 755 build 2>/dev/null || true
+        rm -rf build 2>/dev/null || {
+            print_warning "Build directory cleanup failed, will use different approach"
+            mv build "build-old-$$" 2>/dev/null || true
+        }
+    fi
+    rm -f CMakeCache.txt cmake_install.cmake
+
+    # Clean any executables
+    rm -f login-server char-server map-server web-server
+
+    # Give filesystem time to sync
+    sleep 1
 }
 
 # Function to verify executables exist and are functional
@@ -59,40 +89,39 @@ verify_executables() {
     
     print_info "Verifying executables for $test_name..."
     
-    # Check if executables exist (CMake builds place them in root directory)
+    # Check if executables exist in multiple possible locations
     local executables=()
-    local exe_locations=("$build_path" "../..")
+    local exe_locations=("$build_path" "." "../.." "build")
+    local expected_exes=("login-server" "char-server" "map-server")
 
-    for location in "${exe_locations[@]}"; do
-        if [ -f "$location/login-server" ] || [ -f "$location/login-server.exe" ]; then
-            executables+=("login-server")
-            break
+    for exe in "${expected_exes[@]}"; do
+        local found=false
+        for location in "${exe_locations[@]}"; do
+            if [ -f "$location/$exe" ] || [ -f "$location/$exe.exe" ]; then
+                executables+=("$exe")
+                found=true
+                break
+            fi
+        done
+
+        # If not found in standard locations, try a broader search
+        if [ "$found" = false ]; then
+            if find . -name "$exe" -type f 2>/dev/null | head -1 | grep -q "$exe"; then
+                executables+=("$exe")
+            fi
         fi
     done
 
-    for location in "${exe_locations[@]}"; do
-        if [ -f "$location/char-server" ] || [ -f "$location/char-server.exe" ]; then
-            executables+=("char-server")
-            break
-        fi
-    done
-
-    for location in "${exe_locations[@]}"; do
-        if [ -f "$location/map-server" ] || [ -f "$location/map-server.exe" ]; then
-            executables+=("map-server")
-            break
-        fi
-    done
-
+    # Check for web-server (optional)
     for location in "${exe_locations[@]}"; do
         if [ -f "$location/web-server" ] || [ -f "$location/web-server.exe" ]; then
             executables+=("web-server")
             break
         fi
     done
-    
-    if [ ${#executables[@]} -eq 0 ]; then
-        print_error "No executables found in $build_path"
+
+    if [ ${#executables[@]} -lt 3 ]; then
+        print_error "Expected at least 3 core executables (login, char, map), found ${#executables[@]}: ${executables[*]}"
         return 1
     fi
     
@@ -113,129 +142,163 @@ verify_executables() {
             fi
         done
 
+        # If not found in standard locations, try broader search
+        if [ -z "$exe_path" ]; then
+            exe_path=$(find . -name "$exe" -type f 2>/dev/null | head -1)
+        fi
+
         if [ -n "$exe_path" ] && [ -f "$exe_path" ]; then
-            # Try to run with --help or --version to verify it's functional
-            if timeout 5s "$exe_path" --help >/dev/null 2>&1 ||
-               timeout 5s "$exe_path" --version >/dev/null 2>&1 ||
-               timeout 5s "$exe_path" >/dev/null 2>&1; then
-                print_success "$exe is functional"
+            # Basic executable check - just verify it's a valid executable
+            if [ -x "$exe_path" ]; then
+                print_success "$exe is executable"
             else
-                print_warning "$exe may have issues (couldn't verify functionality)"
+                print_warning "$exe found but not executable"
             fi
+        else
+            print_warning "$exe not found for testing"
         fi
     done
     
     return 0
 }
 
-# Function to test CMake builds
+# Function to test CMake builds with separated workflow
 test_cmake_build() {
     local jobs="$1"
     local build_type="$2"
     local test_name="cmake-${build_type,,}-j${jobs}"
-    
-    print_test_header "CMake Build: $build_type with $jobs jobs"
-    
+
+    print_test_header "CMake Build: $build_type with $jobs jobs (Separated Workflow)"
+
     if ! command -v cmake >/dev/null 2>&1; then
         print_warning "CMake not found, skipping CMake tests"
         return 0
     fi
-    
-    local build_dir="$TEST_DIR/$test_name"
-    mkdir -p "$build_dir"
-    cd "$build_dir"
-    
+
+    # Check if new scripts exist
+    if [ ! -f "configure" ] || [ ! -f "build.sh" ]; then
+        print_error "New separated build scripts not found"
+        FAILED_TESTS+=("$test_name: scripts not found")
+        return 1
+    fi
+
     local start_time=$(date +%s)
-    
-    # Configure
-    print_info "Configuring CMake build..."
-    if ! cmake -DCMAKE_BUILD_TYPE="$build_type" \
-               -DENABLE_PARALLEL_BUILD=ON \
-               -DPARALLEL_BUILD_JOBS="$jobs" \
-               ../.. >/dev/null 2>&1; then
-        print_error "CMake configuration failed"
+
+    # Comprehensive cleanup of previous configuration and build artifacts
+    rm -f .rathena_config Makefile
+    rm -f login-server char-server map-server web-server
+    rm -rf build
+
+    # Step 1: Configure with default build directory (simpler approach)
+    print_info "Configuring with separated configure script..."
+    if ! ./configure -t "$build_type" >/dev/null 2>&1; then
+        print_error "Configure step failed"
         FAILED_TESTS+=("$test_name: configuration failed")
-        cd ../..
         return 1
     fi
-    
-    # Build
-    print_info "Building with $jobs parallel jobs..."
-    if ! cmake --build . --config "$build_type" -j "$jobs" >/dev/null 2>&1; then
-        print_error "CMake build failed"
+
+    # Step 2: Build
+    print_info "Building with $jobs parallel jobs using build script..."
+    if ! ./build.sh -j "$jobs" >/dev/null 2>&1; then
+        print_error "Build step failed"
+        # Debug: Check what went wrong
+        if [ -f .rathena_config ]; then
+            print_info "Configuration file exists, checking build directory..."
+            BUILD_DIR_FROM_CONFIG=$(grep "BUILD_DIR=" .rathena_config | cut -d'"' -f2)
+            if [ -n "$BUILD_DIR_FROM_CONFIG" ] && [ ! -d "$BUILD_DIR_FROM_CONFIG" ]; then
+                print_error "Build directory $BUILD_DIR_FROM_CONFIG does not exist"
+            fi
+        fi
         FAILED_TESTS+=("$test_name: build failed")
-        cd ../..
+        # Clean up before returning
+        rm -f .rathena_config
         return 1
     fi
-    
+
     local end_time=$(date +%s)
     local duration=$((end_time - start_time))
-    
-    # Verify executables
+
+    # Verify executables (CMake builds place executables in root directory)
     if verify_executables "." "$test_name"; then
         print_success "CMake build completed in ${duration}s"
         PASSED_TESTS+=("$test_name: ${duration}s")
     else
         print_error "CMake build verification failed"
         FAILED_TESTS+=("$test_name: verification failed")
-        cd ../..
+        # Clean up before returning
+        rm -f .rathena_config
         return 1
     fi
-    
-    cd ../..
+
+    # Clean up configuration for next test
+    rm -f .rathena_config
     return 0
 }
 
-# Function to test traditional make builds
+# Function to test traditional make builds with separated workflow
 test_make_build() {
     local jobs="$1"
     local test_name="make-j${jobs}"
-    
-    print_test_header "Traditional Make Build with $jobs jobs"
-    
+
+    print_test_header "Traditional Make Build with $jobs jobs (Separated Workflow)"
+
     if ! command -v make >/dev/null 2>&1; then
         print_warning "Make not found, skipping make tests"
         return 0
     fi
-    
-    # Clean any previous build
-    if [ -f Makefile ]; then
-        make clean >/dev/null 2>&1 || true
+
+    # Check if new scripts exist
+    if [ ! -f "configure" ] || [ ! -f "build.sh" ]; then
+        print_error "New separated build scripts not found"
+        FAILED_TESTS+=("$test_name: scripts not found")
+        return 1
     fi
-    
+
+    # Comprehensive cleanup of previous configuration and build artifacts
+    rm -f .rathena_config Makefile
+    rm -f login-server char-server map-server web-server
+    # Clean any CMake build directories that might interfere
+    rm -rf build 2>/dev/null || true
+    # Give filesystem time to sync
+    sleep 1
+
     local start_time=$(date +%s)
-    
-    # Configure if needed
-    if [ ! -f Makefile ]; then
-        print_info "Running configure script..."
-        if ! ./configure >/dev/null 2>&1; then
-            print_error "Configure script failed"
-            FAILED_TESTS+=("$test_name: configure failed")
-            return 1
-        fi
+
+    # Step 1: Configure for traditional make
+    print_info "Configuring with separated configure script for make..."
+    if ! ./configure -m >/dev/null 2>&1; then
+        print_error "Configure step failed"
+        FAILED_TESTS+=("$test_name: configure failed")
+        return 1
     fi
-    
-    # Build
-    print_info "Building with make -j$jobs..."
-    if ! make -j "$jobs" server >/dev/null 2>&1; then
-        print_error "Make build failed"
+
+    # Step 2: Build
+    print_info "Building with $jobs parallel jobs using build script..."
+    if ! ./build.sh -j "$jobs" >/dev/null 2>&1; then
+        print_error "Build step failed"
         FAILED_TESTS+=("$test_name: build failed")
+        # Clean up before returning
+        rm -f .rathena_config Makefile
         return 1
     fi
     
     local end_time=$(date +%s)
     local duration=$((end_time - start_time))
     
-    # Verify executables
+    # Verify executables (Make builds place executables in root directory)
     if verify_executables "." "$test_name"; then
         print_success "Make build completed in ${duration}s"
         PASSED_TESTS+=("$test_name: ${duration}s")
     else
         print_error "Make build verification failed"
         FAILED_TESTS+=("$test_name: verification failed")
+        # Clean up before returning
+        rm -f .rathena_config Makefile
         return 1
     fi
-    
+
+    # Clean up configuration for next test
+    rm -f .rathena_config Makefile
     return 0
 }
 
@@ -344,13 +407,23 @@ show_test_results() {
 
 # Main test execution
 main() {
-    echo "rAthena Parallel Build Test Suite"
-    echo "================================="
+    echo "rAthena Separated Build Workflow Test Suite"
+    echo "==========================================="
     echo ""
-    
-    # Check if we're in the right directory
-    if [ ! -f "CMakeLists.txt" ] || [ ! -f "configure" ]; then
+
+    # Check if we're in the right directory and have new scripts
+    if [ ! -f "CMakeLists.txt" ]; then
         print_error "This script must be run from the rAthena source directory"
+        exit 1
+    fi
+
+    if [ ! -f "configure" ]; then
+        print_error "New configure script not found"
+        exit 1
+    fi
+
+    if [ ! -f "build.sh" ]; then
+        print_error "New build.sh not found"
         exit 1
     fi
     

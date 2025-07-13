@@ -1,17 +1,18 @@
-# Parallel Build Troubleshooting Guide
+# Build System Troubleshooting Guide
 
-This guide helps resolve common issues with rAthena's parallel build system.
+This guide helps resolve common issues with rAthena's separated build workflow and parallel compilation.
 
 ## Quick Diagnostics
 
 Run these commands to quickly identify issues:
 
 ```bash
+# Check script availability
+./configure --help
+./build.sh --help
+
 # Quick verification
 ./test-build-quick.sh
-
-# System information
-./configure-parallel.sh
 
 # Comprehensive testing
 ./test-parallel-build.sh
@@ -42,8 +43,9 @@ MEMORY_GB=$(free -g | awk '/^Mem:/{print $2}')
 SAFE_JOBS=$((MEMORY_GB - 1))  # Leave 1GB for system
 echo "Safe job count: $SAFE_JOBS"
 
-# Build with safe job count
-make -j$SAFE_JOBS server
+# Build with safe job count using new workflow
+./configure -m  # Configure for make
+./build.sh -j$SAFE_JOBS
 ```
 
 ### 2. Linker Errors in Parallel Build
@@ -60,15 +62,18 @@ make -j$SAFE_JOBS server
 **Solutions:**
 
 ```bash
-# Clean and rebuild
-make clean
-make -j4 server
+# Clean and rebuild with new workflow
+./configure -m                    # Configure for make
+./build.sh -c -j4       # Clean build with 4 jobs
 
 # For CMake builds
-rm -rf build
-mkdir build && cd build
-cmake -DENABLE_PARALLEL_BUILD=ON ..
-cmake --build . -j4
+./configure -t Release            # Configure for CMake
+./build.sh -c -j4       # Clean build with 4 jobs
+
+# Manual approach if needed
+rm -rf build .rathena_config
+./configure
+./build.sh -j4
 ```
 
 ### 3. "make: command not found"

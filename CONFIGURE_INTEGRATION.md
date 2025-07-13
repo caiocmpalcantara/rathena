@@ -1,6 +1,6 @@
 # rAthena Configure Options Integration Guide
 
-This guide explains how to use rAthena's traditional configure options with the parallel build system.
+This guide explains how to use rAthena's traditional configure options with the new separated build workflow.
 
 ## Table of Contents
 
@@ -19,7 +19,7 @@ rAthena supports two build systems:
 1. **Traditional autotools/Make** - Supports all configure options
 2. **CMake** - Uses its own configuration system (limited configure option support)
 
-The parallel build system integrates with both, but configure options work differently in each.
+The separated build workflow integrates with both, but configure options work differently in each.
 
 ## Build System Differences
 
@@ -43,11 +43,11 @@ The parallel build system integrates with both, but configure options work diffe
 ### Basic Workflow
 
 ```bash
-# Method 1: Enhanced script (recommended)
-./configure-parallel.sh -j 8 -- --enable-prere --enable-packetver=20180620
+# Step 1: Configure for traditional make with options
+./configure -m -- --enable-prere --enable-packetver=20180620
 
-# Method 2: Build script with configure options
-./build-parallel.sh -m -j 8 -- --enable-debug --enable-vip
+# Step 2: Build with parallel jobs
+./build.sh -j 8
 
 # Method 3: Manual approach
 ./configure --enable-renewal --with-mysql=/usr/local/mysql
@@ -56,10 +56,10 @@ make -j 8 server
 
 ### Configure Arguments Syntax
 
-Use `--` to separate parallel build options from configure options:
+Use `--` to separate configuration options from configure options:
 
 ```bash
-script [PARALLEL_OPTIONS] -- [CONFIGURE_OPTIONS]
+./configure [CONFIG_OPTIONS] -- [CONFIGURE_OPTIONS]
 ```
 
 ## CMake Limitations
@@ -75,11 +75,13 @@ CMake builds **do not support** traditional configure options because:
 For features requiring configure options, use traditional make:
 
 ```bash
-# Instead of this (won't work):
-./build-parallel.sh -j 8 -- --enable-prere
+# Instead of CMake (limited configure option support):
+./configure -- --enable-prere
+./build.sh -j 8
 
-# Use this:
-./build-parallel.sh -m -j 8 -- --enable-prere
+# Use traditional make for full configure option support:
+./configure -m -- --enable-prere
+./build.sh -j 8
 ```
 
 ## Common Configure Options

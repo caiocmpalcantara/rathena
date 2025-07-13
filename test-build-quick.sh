@@ -22,79 +22,110 @@ TEST_BUILD_DIR="quick-test-build"
 cleanup() {
     print_info "Cleaning up..."
     rm -rf "$TEST_BUILD_DIR"
+    rm -f .rathena_config
     if [ -f Makefile ]; then
         make clean >/dev/null 2>&1 || true
     fi
+    # Clean any executables
+    rm -f login-server char-server map-server web-server
 }
 
 test_cmake_quick() {
-    print_info "Testing CMake parallel build..."
-    
+    print_info "Testing CMake parallel build with separated workflow..."
+
     if ! command -v cmake >/dev/null 2>&1; then
         print_error "CMake not found"
         return 1
     fi
-    
-    mkdir -p "$TEST_BUILD_DIR"
-    cd "$TEST_BUILD_DIR"
-    
-    # Configure
-    if ! cmake -DCMAKE_BUILD_TYPE=Release \
-               -DENABLE_PARALLEL_BUILD=ON \
-               -DPARALLEL_BUILD_JOBS="$QUICK_TEST_JOBS" \
-               .. >/dev/null 2>&1; then
-        print_error "CMake configuration failed"
-        cd ..
+
+    # Check if new scripts exist
+    if [ ! -f "configure" ] || [ ! -f "build.sh" ]; then
+        print_error "New separated build scripts not found"
         return 1
     fi
-    
-    # Build just the common library (fastest test)
-    if ! cmake --build . --target common -j "$QUICK_TEST_JOBS" >/dev/null 2>&1; then
-        print_error "CMake build failed"
-        cd ..
+
+    # Step 1: Configure for CMake
+    if ! ./configure -t Release -d "$TEST_BUILD_DIR" >/dev/null 2>&1; then
+        print_error "Configure step failed"
         return 1
     fi
-    
-    print_success "CMake parallel build works"
-    cd ..
-    return 0
+
+    # Step 2: Build with the new build script
+    if ! ./build.sh -j "$QUICK_TEST_JOBS" >/dev/null 2>&1; then
+        print_error "Build step failed"
+        return 1
+    fi
+
+    # Check if executables were created
+    if [ -f "login-server" ] && [ -f "char-server" ] && [ -f "map-server" ]; then
+        print_success "CMake separated workflow works"
+        return 0
+    else
+        print_error "Executables not found after build"
+        return 1
+    fi
 }
 
 test_make_quick() {
-    print_info "Testing Make parallel build..."
-    
+    print_info "Testing Make parallel build with separated workflow..."
+
     if ! command -v make >/dev/null 2>&1; then
         print_error "Make not found"
         return 1
     fi
-    
-    # Configure if needed
-    if [ ! -f Makefile ]; then
-        if ! ./configure >/dev/null 2>&1; then
-            print_error "Configure failed"
-            return 1
-        fi
-    fi
-    
-    # Build just the common target
-    if ! make -j "$QUICK_TEST_JOBS" common >/dev/null 2>&1; then
-        print_error "Make parallel build failed"
+
+    # Check if new scripts exist
+    if [ ! -f "configure" ] || [ ! -f "build.sh" ]; then
+        print_error "New separated build scripts not found"
         return 1
     fi
-    
-    print_success "Make parallel build works"
-    return 0
+
+    # Clean any previous configuration
+    rm -f .rathena_config Makefile
+
+    # Step 1: Configure for traditional make
+    if ! ./configure -m >/dev/null 2>&1; then
+        print_error "Configure step for make failed"
+        return 1
+    fi
+
+    # Step 2: Build with the new build script
+    if ! ./build.sh -j "$QUICK_TEST_JOBS" >/dev/null 2>&1; then
+        print_error "Build step for make failed"
+        return 1
+    fi
+
+    # Check if executables were created
+    if [ -f "login-server" ] && [ -f "char-server" ] && [ -f "map-server" ]; then
+        print_success "Make separated workflow works"
+        return 0
+    else
+        print_error "Executables not found after make build"
+        return 1
+    fi
 }
 
 main() {
-    echo "rAthena Quick Parallel Build Test"
-    echo "================================="
-    
+    echo "rAthena Quick Separated Build Workflow Test"
+    echo "==========================================="
+
     if [ ! -f "CMakeLists.txt" ]; then
         print_error "Must run from rAthena source directory"
         exit 1
     fi
-    
+
+    # Check if new scripts exist
+    if [ ! -f "configure" ]; then
+        print_error "New configure script not found"
+        exit 1
+    fi
+
+    if [ ! -f "build.sh" ]; then
+        print_error "New build.sh not found"
+        exit 1
+    fi
+    print_success "build.sh found"
+
     cleanup
     
     local cmake_result=0

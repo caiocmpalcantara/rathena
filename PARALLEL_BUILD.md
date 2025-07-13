@@ -32,37 +32,40 @@ Typical speedup with parallel builds:
 
 ## Quick Start
 
-### Option 1: Enhanced Script with Configure Options (Recommended)
+### Option 1: Separated Workflow (Recommended)
 
 ```bash
-# Basic parallel build
-./configure-parallel.sh -j 8
+# Step 1: Configure the build
+./configure                    # Basic configuration
+./configure -t Debug           # Debug build
+./configure -m                 # Traditional make instead of CMake
 
-# Pre-renewal with specific packet version
-./configure-parallel.sh -m -j 8 -- --enable-prere --enable-packetver=20180620
+# Step 2: Build the project
+./build.sh           # Build with auto-detected cores
+./build.sh -j 8      # Build with 8 parallel jobs
+./build.sh -c        # Clean build
 
-# Debug build with VIP features
-./configure-parallel.sh -m -j 8 -- --enable-debug --enable-vip
-
-# Or use the parallel build script
-./build-parallel.sh -j 8
-./build-parallel.sh -m -j 8 -- --enable-debug --enable-warn
+# Advanced configuration examples
+./configure -- --enable-prere --enable-packetver=20180620  # Pre-renewal
+./configure -t Debug -- --enable-debug --enable-vip        # Debug with VIP
+./configure -m -- --enable-debug --enable-warn             # Make with debug
 ```
 
-### Option 1b: Legacy Automated Setup
+### Option 1b: Legacy Combined Scripts (Deprecated)
 
 ```bash
-# Configure optimal settings automatically (legacy method)
-./configure-parallel.sh
-
-# Use the generated configuration
-source ./build-config.sh
-rathena_build_cmake Release
+# These scripts are deprecated - use the separated workflow above
+./configure-parallel.sh -j 8
+./build-parallel.sh -j 8
 ```
 
 ### Option 2: Manual CMake Build
 
 ```bash
+# Configure for CMake
+./configure -t Release -- --enable-renewal
+
+# Manual CMake build (if you prefer manual control)
 mkdir build && cd build
 cmake -DENABLE_PARALLEL_BUILD=ON -DPARALLEL_BUILD_JOBS=8 ..
 cmake --build . -j 8
@@ -71,7 +74,10 @@ cmake --build . -j 8
 ### Option 3: Manual Make Build
 
 ```bash
-./configure --enable-parallel-build --with-parallel-jobs=8
+# Configure for traditional make
+./configure -m -- --enable-renewal
+
+# Manual make build (if you prefer manual control)
 make -j 8 server
 ```
 
@@ -79,45 +85,57 @@ make -j 8 server
 
 ### CMake (Recommended)
 
-CMake provides the most advanced parallel build support:
+CMake provides the most advanced parallel build support with the new separated workflow:
 
 ```bash
-# Basic parallel build
-cmake -DENABLE_PARALLEL_BUILD=ON ..
-cmake --build . -j $(nproc)
+# Step 1: Configure for CMake (default)
+./configure -t Release           # Release build
+./configure -t Debug             # Debug build
+./configure -d custom-build      # Custom build directory
 
-# With specific job count
-cmake -DPARALLEL_BUILD_JOBS=16 ..
+# Step 2: Build with parallel jobs
+./build.sh -j $(nproc) # Auto-detect cores
+./build.sh -j 16       # Specific job count
+./build.sh -c          # Clean build
+
+# Manual CMake (if needed)
+cmake -DENABLE_PARALLEL_BUILD=ON -DCMAKE_BUILD_TYPE=Release ..
 cmake --build . -j 16
-
-# Different build types
-cmake -DCMAKE_BUILD_TYPE=Release -DENABLE_PARALLEL_BUILD=ON ..
-cmake -DCMAKE_BUILD_TYPE=Debug -DENABLE_PARALLEL_BUILD=ON ..
 ```
 
-#### CMake Options
+#### Configuration Options
 
-| Option | Description | Default |
-|--------|-------------|---------|
-| `ENABLE_PARALLEL_BUILD` | Enable parallel compilation | `ON` |
-| `PARALLEL_BUILD_JOBS` | Number of parallel jobs | Auto-detect |
-| `CMAKE_BUILD_TYPE` | Build configuration | `Release` |
+| Configure Option | Description | Default |
+|------------------|-------------|---------|
+| `-t TYPE` | Build type (Debug, Release, RelWithDebInfo) | `Release` |
+| `-d DIR` | Build directory | `build` |
+| `-v` | Verbose output | `false` |
+
+#### Build Options
+
+| Build Option | Description | Default |
+|--------------|-------------|---------|
+| `-j NUM` | Number of parallel jobs | Auto-detect |
+| `-c` | Clean build | `false` |
+| `-i` | Install after build | `false` |
+| `-v` | Verbose output | `false` |
 
 ### Traditional Make
 
 The traditional autotools build system also supports parallel compilation:
 
 ```bash
-# Configure with parallel support
-./configure --enable-parallel-build
+# Step 1: Configure for traditional make
+./configure -m                   # Use make instead of CMake
+./configure -m -- --enable-prere # Pre-renewal with make
 
-# Build with parallel jobs
+# Step 2: Build with parallel jobs
+./build.sh -j $(nproc) # Auto-detect cores
+./build.sh -j 8        # Specific job count
+
+# Manual make (if needed)
 make -j $(nproc) server
 make -j 8 all
-make -j 4 tools
-
-# Parallel clean (faster)
-make clean-parallel
 ```
 
 #### Configure Options

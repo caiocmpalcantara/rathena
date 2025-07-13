@@ -11,6 +11,7 @@ Thumbs.db
 /test-builds/*
 /test-cmake-debug/*
 /test-cmake-manual/*
+.rathena_config
 
 # /
 /*_fifo

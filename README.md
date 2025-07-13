@@ -61,34 +61,32 @@ Database | [MySQL Workbench 5 or newer](http://www.mysql.com/downloads/workbench
   * [Debian](https://github.com/rathena/rathena/wiki/Install-on-Debian)
   * [FreeBSD](https://github.com/rathena/rathena/wiki/Install-on-FreeBSD)
 
-## 3. Parallel Build Support
+## 3. Build System
 
-rAthena now supports **multi-threaded compilation** for significantly faster build times! 🚀
+rAthena uses a **two-step build process** with separated configuration and compilation for better organization and faster builds! 🚀
 
 ### Quick Start
 ```bash
-# Automatic configuration (recommended)
-./configure-parallel.sh
-source ./build-config.sh
-rathena_build_cmake Release
+# Step 1: Configure the build
+./configure                    # Basic configuration
+./configure -t Debug           # Debug build
+./configure -m                 # Traditional make instead of CMake
 
-# Or use the parallel build script
-./build-parallel.sh -j 8
+# Step 2: Build the project
+./build.sh           # Build with auto-detected cores
+./build.sh -j 8      # Build with 8 parallel jobs
+./build.sh -c        # Clean build
 
-# Manual CMake build
-mkdir build && cd build
-cmake -DENABLE_PARALLEL_BUILD=ON -DPARALLEL_BUILD_JOBS=8 ..
-cmake --build . -j 8
-
-# Manual Make build
-./configure --enable-parallel-build
-make -j 8 server
+# Advanced configuration examples
+./configure -- --enable-prere --enable-packetver=20180620  # Pre-renewal
+./configure -t Debug -- --enable-debug --enable-vip        # Debug with VIP
 ```
 
 ### Performance Improvements
 - **2-4x faster** on quad-core systems
 - **4-8x faster** on 8+ core systems
 - **Up to 20x faster** on high-end workstations
+- **Separated concerns**: Configure once, build many times
 
 ### Documentation
 For detailed information, see [PARALLEL_BUILD.md](PARALLEL_BUILD.md)
@@ -101,11 +99,15 @@ can be solved simply by looking at the error messages given. Check out the [wiki
 or [forums](https://rathena.org/forum) if you need more support on troubleshooting.
 
 ### Build Issues
-For parallel build troubleshooting, run:
+For build troubleshooting, run:
 ```bash
-./test-build-quick.sh      # Quick verification
-./test-parallel-build.sh   # Comprehensive testing
+./configure --help              # See configuration options
+./build.sh --help     # See build options
+./test-build-quick.sh           # Quick verification
+./test-parallel-build.sh        # Comprehensive testing
 ```
+
+For detailed troubleshooting, see [TROUBLESHOOTING_PARALLEL_BUILD.md](TROUBLESHOOTING_PARALLEL_BUILD.md)
 
 ## 5. More Documentation
 rAthena has a large collection of help files and sample NPC scripts located in the /doc/

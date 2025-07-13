@@ -21,7 +21,7 @@ Successfully implemented comprehensive parallel build support for rAthena, enabl
 - **Cross-platform compatibility** (Linux, macOS, Windows)
 
 ### 🛠️ User-Friendly Tools
-- Automated configuration scripts
+- **Separated workflow** with dedicated configure and build scripts
 - Build testing and verification tools
 - Comprehensive documentation and troubleshooting guides
 
@@ -43,10 +43,10 @@ Successfully implemented comprehensive parallel build support for rAthena, enabl
 
 ### New User Tools
 
-#### Build Scripts
-- **`build-parallel.sh`** - Main parallel build script with auto-detection
-- **`configure-parallel.sh`** - System analysis and configuration tool
-- **`build-config.sh`** - Generated configuration file (created by configure-parallel.sh)
+#### Build Scripts (Updated to Separated Workflow)
+- **`configure`** - Configuration script for project setup and build parameters
+- **`build.sh`** - Build script for parallel compilation (to be renamed to `build`)
+- **`.rathena_config`** - Generated configuration file (created by configure script)
 
 #### Testing Tools
 - **`test-parallel-build.sh`** - Comprehensive build system testing
@@ -108,28 +108,33 @@ MAKEFLAGS += --no-print-directory
 
 ## Usage Examples
 
-### Quick Start
+### Quick Start (Updated Separated Workflow)
 ```bash
-# Automatic setup
-./configure-parallel.sh
-source ./build-config.sh
-rathena_build_cmake Release
+# Step 1: Configure the build
+./configure                    # Basic configuration
+./configure -t Debug           # Debug build
+./configure -m                 # Traditional make
 
-# Manual CMake
-mkdir build && cd build
-cmake -DENABLE_PARALLEL_BUILD=ON -DPARALLEL_BUILD_JOBS=8 ..
-cmake --build . -j 8
+# Step 2: Build with parallel jobs
+./build.sh           # Auto-detect cores
+./build.sh -j 8      # 8 parallel jobs
+./build.sh -c        # Clean build
 
-# Manual Make
-./configure --enable-parallel-build
-make -j 8 server
+# Advanced configuration examples
+./configure -- --enable-prere --enable-packetver=20180620
+./configure -t Debug -- --enable-debug --enable-vip
 ```
 
 ### Advanced Usage
 ```bash
-# Build specific components in parallel
-make -j8 3rdparty-parallel
-make -j8 servers-parallel
+# Manual CMake (if needed)
+mkdir build && cd build
+cmake -DENABLE_PARALLEL_BUILD=ON -DPARALLEL_BUILD_JOBS=8 ..
+cmake --build . -j 8
+
+# Manual Make (if needed)
+./configure.original --enable-renewal
+make -j 8 server
 
 # Test the implementation
 ./test-parallel-build.sh
